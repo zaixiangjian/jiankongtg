@@ -1,0 +1,102 @@
+export default async function handler(req, res) {
+  if (req.method !== 'POST') {
+    return res.status(200).send('Notify service running');
+  }
+
+  try {
+    // =========================
+    // 读取请求 body
+    // =========================
+    const chunks = [];
+    for await (const chunk of req) {
+      chunks.push(chunk);
+    }
+
+    const raw = Buffer.concat(chunks).toString('utf-8');
+    const data = JSON.parse(raw || '{}');
+    const { title = 'Unknown', msg = '' } = data;
+
+    console.log('收到通知:', { title, msg });
+
+    // =========================
+    // 1️⃣ Telegram 通知
+    // =========================
+    const botToken = process.env.TG_BOT_TOKEN;
+    const chatId = process.env.TG_CHAT_ID;
+
+    if (botToken && chatId) {
+      const telegramUrl = `https://api.telegram.org/bot${botToken}/sendMessage`;
+
+      const tgResp = await fetch(telegramUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text: `🔔 ${title}\n\n${msg}`,
+          parse_mode: 'Markdown',
+        }),
+      });
+
+      const tgData = await tgResp.json();
+
+      if (!tgData.ok) {
+        console.error('Telegram发送失败:', tgData);
+      }
+    }
+
+    // =========================
+    // 2️⃣ Resend 邮件通知
+    // =========================
+    const resendKey = process.env.RESEND_API_KEY;
+    const from = process.env.RESEND_FROM;
+    const to = process.env.RESEND_TO;
+
+    if (resendKey && from && to) {
+      const emailResp = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${resendKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          from,
+          to: [to],
+          subject: `【监控告警】${title}`,
+          html: `
+            <div style="font-family:Arial">
+              <h2>网站监控告警</h2>
+              <p><b>${title}</b></p>
+              <p>${msg}</p>
+              <hr/>
+              <small>Uptime Monitor System</small>
+            </div>
+          `,
+        }),
+      });
+
+      const emailData = await emailResp.json();
+
+      if (emailData.error) {
+        console.error('Resend发送失败:', emailData);
+      }
+    }
+
+    // =========================
+    // 返回成功
+    // =========================
+    return res.status(200).json({
+      success: true,
+      message: 'Telegram + Email 已发送',
+      title,
+      msg,
+    });
+
+  } catch (err) {
+    console.error('Notify Error:', err);
+
+    return res.status(500).json({
+      success: false,
+      error: String(err),
+    });
+  }
+}
