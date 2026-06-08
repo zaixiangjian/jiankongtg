@@ -14,6 +14,6 @@ TG_CHAT_ID=744400
 # Resend
 RESEND_API_KEY=re_xxxxxxxx
 
-RESEND_FROM="Uptime Monitor <onboarding@resend.dev>"
+RESEND_FROM=网站监控通知 <onboarding@resend.dev>
 
 RESEND_TO=yourmail@example.com
